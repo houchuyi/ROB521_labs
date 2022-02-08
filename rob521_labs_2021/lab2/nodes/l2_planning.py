@@ -95,24 +95,94 @@ class PathPlanner:
         #This function drives the robot from node_i towards point_s. This function does has many solutions!
         #node_i is a 3 by 1 vector [x;y;theta] this can be used to construct the SE(2) matrix T_{OI} in course notation
         #point_s is the sampled point vector [x; y]
-        print("TO DO: Implment a method to simulate a trajectory given a sampled point")
+        # print("TO DO: Implment a method to simulate a trajectory given a sampled point")
         vel, rot_vel = self.robot_controller(node_i, point_s)
 
         robot_traj = self.trajectory_rollout(vel, rot_vel)
+
         return robot_traj
     
     def robot_controller(self, node_i, point_s):
         #This controller determines the velocities that will nominally move the robot from node i to node s
         #Max velocities should be enforced
-        print("TO DO: Implement a control scheme to drive you towards the sampled point")
-        return 0, 0
+        # print("TO DO: Implement a control scheme to drive you towards the sampled point")
+        # return 0, 0
+
+        # the idea is to make the robot turn towards the point using a rot_vel
+        # while depending on the distance, we set a reasonable linear vel
+
+        # depends on the angle differnce between the pose of the robot and the direction it needs
+        # to head towards, set a reasonable rotation velocity
+        dx = point_s[0] - node_i.point[0]
+        dy = point_s[1] - node_i.point[1]
+        theta_i_s = np.arctan2(y,x)
+
+        theta = node_i.point[2]
+        angle_threshold = np.divide(np.pi,3)
+
+        angle_difference =np.abs(theta - theta_i_s)
+        if angle_difference >= angle_threshold:
+            rot_vel = self.rot_vel_max
+        else
+            rot_vel = np.multiply(self.rot_vel_max, np.divide(angle_difference, angle_threshold))
+
+        # depends on the distance, we set a reasonable linear velocity
+        dist_threshold = 2
+        dist = np.sqrt(np.square(dx)+np.square(dy))
+        if dist >= dist_threshold:
+            vel = self.vel_max
+        else:
+            vel = np.multiply(self.vel_max, np.divide(dist,dist_threshold))
+
+        # determine the direction of rotation
+        # the idea is to try a positive rotation vel first and see
+        # whether the result position is farther or closer
+        # if farther, then we know the rot vel shold actually be negative
+        # if closer, then we are good
+        theta = np.multiply(rot_vel, self.timestep)
+        x = np.multiply(np.divide(vel, rot_vel), np.sin(theta)) 
+        y = np.multiply(np.divide(vel, rot_vel), 1 - np.cos(theta))
+
+        dx = point_s[0] - x
+        dy = point_s[1] - y
+        new_dist = np.sqrt(np.squre(dx)+np.squre(dy))
+
+        if new_dist > dist:
+            rot_vel = -rot_vel
+
+        # note it is possible that new_dist = dist
+        # because the vel and rot vel can result a certain curvature
+        # basically, the simulated new position and the old position
+        # are on the same arc. In this case, the direction of the rotation
+        # is actually correct. Hence, we are good
+
+        return vel, rot_vel
+
+
     
     def trajectory_rollout(self, vel, rot_vel):
         # Given your chosen velocities determine the trajectory of the robot for your given timestep
         # The returned trajectory should be a series of points to check for collisions
-        print("TO DO: Implement a way to rollout the controls chosen")
-        return np.zeros((3, self.num_substeps))
-    
+        # print("TO DO: Implement a way to rollout the controls chosen")
+
+        points = []
+
+        # can be done using matrix multiplications, will update this later
+        # use unicycle model kinematics to simulate the motion
+        for i in range(self.num_substeps):
+
+            # obtain the new point (x,y,theta) using the unicycle model
+            theta = np.multiply(rot_vel, self.timestep)
+            x = np.multiply(np.divide(vel, rot_vel), np.sin(theta)) 
+            y = np.multiply(np.divide(vel, rot_vel), 1 - np.cos(theta)) 
+
+            point = [x,y,theta]
+        
+            points.append(point)
+
+        #return np.zeros((3, self.num_substeps))
+        return np.array(points).T
+
     def point_to_cell(self, point):
         #Convert a series of [x,y] points in the map to the indices for the corresponding cell in the occupancy map
         #point is a 2 by N matrix of points of interest
