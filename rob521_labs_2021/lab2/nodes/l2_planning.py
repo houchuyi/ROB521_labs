@@ -18,7 +18,7 @@ def load_map(filename):
 
 def load_map_yaml(filename):
     with open("../maps/" + filename, "r") as stream:
-            map_settings_dict = yaml.safe_load(stream)
+        map_settings_dict = yaml.safe_load(stream)
     return map_settings_dict
 
 #Node for building a graph
@@ -79,11 +79,11 @@ class PathPlanner:
         #Return an [x,y] coordinate to drive the robot towards
         #print("TO DO: Sample point to drive towards")
         
-        pt = np.random.rand((2,1))
+        pt = np.random.rand(2,1)
         pt[0] = pt[0] * (self.bounds[0,1] - self.bounds[0,0]) + self.bounds[0,0]
         pt[1] = pt[1] * (self.bounds[1,1] - self.bounds[1,0]) + self.bounds[1,0]
-    
-        while check_if_duplicate(pt):
+     
+        while self.check_if_duplicate(pt):
             pt = np.random.rand((2,1))
             pt[0] = pt[0] * (self.bounds[0,1] - self.bounds[0,0]) + self.bounds[0,0]
             pt[1] = pt[1] * (self.bounds[1,1] - self.bounds[1,0]) + self.bounds[1,0]
@@ -105,7 +105,7 @@ class PathPlanner:
         
         d_list = []
         for node in self.nodes:
-            distance = np.norm(node.point[0:2]-point)
+            distance = np.linalg.norm(node.point[0:2]-point)
             d_list.append(distance)
 
         d_list = np.array(d_list)
@@ -122,7 +122,7 @@ class PathPlanner:
 
         robot_traj = self.trajectory_rollout(vel, rot_vel)
 
-        return robot_traj
+        return robot_traj + node_i
     
     def robot_controller(self, node_i, point_s):
         #This controller determines the velocities that will nominally move the robot from node i to node s
@@ -137,16 +137,16 @@ class PathPlanner:
         # to head towards, set a reasonable rotation velocity
         dx = point_s[0] - node_i[0]
         dy = point_s[1] - node_i[1]
-        theta_i_s = np.arctan2(y,x)
+        theta_i_s = np.arctan2(dy,dx)
 
         theta = node_i[2]
-        angle_threshold = np.divide(np.pi,3)
+        angle_threshold = np.pi/3
 
-        angle_difference =np.abs(theta - theta_i_s)
+        angle_difference = np.abs(theta - theta_i_s[0])
         if angle_difference >= angle_threshold:
             rot_vel = self.rot_vel_max
         else:
-            rot_vel = np.multiply(self.rot_vel_max, np.divide(angle_difference, angle_threshold))
+            rot_vel = self.rot_vel_max * (angle_difference / angle_threshold)
 
         # depends on the distance, we set a reasonable linear velocity
         dist_threshold = 2 # metres
@@ -167,7 +167,7 @@ class PathPlanner:
 
         dx = point_s[0] - x
         dy = point_s[1] - y
-        new_dist = np.sqrt(np.squre(dx)+np.squre(dy))
+        new_dist = np.sqrt(np.square(dx)+np.square(dy))
 
         if new_dist > dist:
             rot_vel = -rot_vel
@@ -192,7 +192,7 @@ class PathPlanner:
         for i in range(self.num_substeps):
 
             # obtain the new point (x,y,theta) using the unicycle model
-            theta = np.multiply(rot_vel, self.timestep)
+            theta = rot_vel * self.timestep * i / self.num_substeps
             x = np.multiply(np.divide(vel, rot_vel), np.sin(theta)) 
             y = np.multiply(np.divide(vel, rot_vel), 1 - np.cos(theta)) 
 
@@ -200,31 +200,33 @@ class PathPlanner:
         
             points.append(point)
 
+        print(vel, rot_vel, theta)
         #return np.zeros((3, self.num_substeps))
-        return np.array(points).T
+        return np.reshape(np.array(points).T, (3,self.num_substeps))
 
     def point_to_cell(self, point):
         #Convert a series of [x,y] points in the map to the indices for the corresponding cell in the occupancy map
         #point is a 2 by N matrix of points of interest
         #print("TO DO: Implement a method to get the map cell the robot is currently occupying")
-        
         point[0,:] = point[0,:] - self.map_settings_dict["origin"][0]
         point[1,:] = point[1,:] - self.map_settings_dict["origin"][1]
         
-        point = np.floor(point / self.map_settings_dict['resolution'])
+        point = point // self.map_settings_dict['resolution']
 
         return point
 
     def points_to_robot_circle(self, points):
         #Convert a series of [x,y] points to robot map footprints for collision detection
         #Hint: The disk function is included to help you with this function
-        print("TO DO: Implement a method to get the pixel locations of the robot path")
+        #print("TO DO: Implement a method to get the pixel locations of the robot path")
 
         # obtain pixel coordinates (cell) of the points
         cell = self.point_to_cell(points)
 
         R, C = np.array([]), np.array([])
         for r,c in cell.T:
+            # print("hi")
+            # print(r,c,np.ceil(self.robot_radius/self.map_settings_dict['resolution']))
             rr,cc = circle(r,c,np.ceil(self.robot_radius/self.map_settings_dict['resolution']))
             R = np.concatenate((R,rr))
             C = np.concatenate((C,cc))
@@ -287,11 +289,11 @@ class PathPlanner:
             if not any(self.occupancy_map[R,C]): continue 
 
             # append this collision-free node to our list
-            self.nodes.append(Node(trajectory_o[0:2,-1],closest_node_id,0))
+            self.nodes.append(Node(trajectory_o[:,-1],closest_node_id,0))
 
             #Check if goal has been reached
             #print("TO DO: Check if at goal point.")
-            if np.norm(trajectory_o[0:2,-1]-self.goal_point) <= self.stopping_dist:
+            if np.linalg.norm(trajectory_o[0:2,-1]-self.goal_point) <= self.stopping_dist:
                 goal_reached = True
 
             if n >= threshold_iter: break 
@@ -345,18 +347,11 @@ def main():
 
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
-    nodes = path_planner.rrt_star_planning()
+    nodes = path_planner.rrt_planning()
     node_path_metric = np.hstack(path_planner.recover_path())
 
     #Leftover test functions
     np.save("shortest_path.npy", node_path_metric)
-
-    cell = path_planner.point_to_cell(np.array([[-20.99,-19.99,30],[-49.24,-48.24,40]]))
-    print(cell)
-
-    R,C = path_planner.points_to_robot_circle(np.array([[-20.99,-19.99,30],[-49.24,-48.24,40]]))
-    print(R)
-    print(C)
 
 
 if __name__ == '__main__':
