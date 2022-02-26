@@ -263,7 +263,8 @@ class PathPlanner:
         #You do not need to demonstrate this function to the TAs, but it is left in for you to check your work
     
         goal_reached = False
-
+        n = 0
+        threshold_iter = 6969
         while not goal_reached: #Most likely need more iterations than this to complete the map!
 
             #Sample map space
@@ -292,6 +293,10 @@ class PathPlanner:
             #print("TO DO: Check if at goal point.")
             if np.norm(trajectory_o[0:2,-1]-self.goal_point) <= self.stopping_dist:
                 goal_reached = True
+
+            if n >= threshold_iter: break 
+
+            n+=1
 
         return self.nodes
     
