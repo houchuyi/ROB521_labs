@@ -65,11 +65,11 @@ class PygameWindow:
         pygame.draw.polygon(self.screen, color, [c_vec, p1_vec, p2_vec], width=width)
         pygame.display.update()
 
-    # def add_line(self, p1, p2, width=1, color=COLORS['k']):
-    #     pygame.draw.line(self.screen, color, p1, p2, width)
+    def add_line(self, p1, p2, width=1, color=COLORS['k']):
+        pygame.draw.line(self.screen, color, p1, p2, width)
 
-    # def remove_line(self, p1, p2, width=1, color=COLORS['w']):
-    #     pygame.draw.line(self.screen, color, p1, p2, width)
+    def remove_line(self, p1, p2, width=1, color=COLORS['w']):
+        pygame.draw.line(self.screen, color, p1, p2, width)
 
     def point_to_vec(self, point):
         vec = pygame.math.Vector2()
