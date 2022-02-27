@@ -122,7 +122,7 @@ class PathPlanner:
 
         robot_traj = self.trajectory_rollout(vel, rot_vel)
 
-        return robot_traj + node_i
+        return robot_traj + np.reshape(node_i,(3,1))
     
     def robot_controller(self, node_i, point_s):
         #This controller determines the velocities that will nominally move the robot from node i to node s
@@ -135,42 +135,55 @@ class PathPlanner:
 
         # depends on the angle differnce between the pose of the robot and the direction it needs
         # to head towards, set a reasonable rotation velocity
-        dx = point_s[0] - node_i[0]
-        dy = point_s[1] - node_i[1]
+
+        dx = point_s[0] - node_i[0][0]
+        dy = point_s[1] - node_i[1][0]
         theta_i_s = np.arctan2(dy,dx)
 
-        theta = node_i[2]
+        theta = node_i[2] # pose of the robot
         angle_threshold = np.pi/3
 
-        angle_difference = np.abs(theta - theta_i_s[0])
-        if angle_difference >= angle_threshold:
-            rot_vel = self.rot_vel_max
-        else:
-            rot_vel = self.rot_vel_max * (angle_difference / angle_threshold)
+        angle_difference = theta - theta_i_s[0]
+        
+        # theta needs to be within -pi and pi for this to work. If not, we should change this
+        if angle_difference < 0:
+            if np.abs(angle_difference) >= angle_threshold:
+                rot_vel = - self.rot_vel_max
+            else:
+                rot_vel = self.rot_vel_max * (angle_difference / angle_threshold)
+
+        elif angle_difference > 0:
+            if np.abs(angle_difference) >= angle_threshold:
+                rot_vel = self.rot_vel_max
+            else:
+                rot_vel = - self.rot_vel_max * (angle_difference / angle_threshold)
+
+        elif angle_difference == 0:
+            rot_vel = 0
 
         # depends on the distance, we set a reasonable linear velocity
-        dist_threshold = 2 # metres
-        dist = np.sqrt(np.square(dx)+np.square(dy))
+        dist_threshold = 1 # metres
+        dist = np.sqrt(np.square(dx)+np.square(dy))[0]
         if dist >= dist_threshold:
             vel = self.vel_max
         else:
-            vel = np.multiply(self.vel_max, np.divide(dist,dist_threshold))
+            vel = self.vel_max * dist / dist_threshold
 
         # determine the direction of rotation
         # the idea is to try a positive rotation vel first and see
         # whether the result position is farther or closer
         # if farther, then we know the rot vel shold actually be negative
         # if closer, then we are good
-        theta = np.multiply(rot_vel, self.timestep)
-        x = np.multiply(np.divide(vel, rot_vel), np.sin(theta)) 
-        y = np.multiply(np.divide(vel, rot_vel), 1 - np.cos(theta))
+        # theta = np.multiply(rot_vel, self.timestep)
+        # x = np.multiply(np.divide(vel, rot_vel), np.sin(theta)) 
+        # y = np.multiply(np.divide(vel, rot_vel), 1 - np.cos(theta))
 
-        dx = point_s[0] - x
-        dy = point_s[1] - y
-        new_dist = np.sqrt(np.square(dx)+np.square(dy))
+        # dx = point_s[0] - x
+        # dy = point_s[1] - y
+        # new_dist = np.sqrt(np.square(dx)+np.square(dy))
 
-        if new_dist > dist:
-            rot_vel = -rot_vel
+        # if new_dist > dist:
+        #     rot_vel = -rot_vel
 
         # note it is possible that new_dist = dist
         # because the vel and rot vel can result a certain curvature
@@ -192,7 +205,7 @@ class PathPlanner:
         for i in range(self.num_substeps):
 
             # obtain the new point (x,y,theta) using the unicycle model
-            theta = rot_vel * self.timestep * i / self.num_substeps
+            theta = rot_vel * self.timestep * (i+1) / self.num_substeps
             x = np.multiply(np.divide(vel, rot_vel), np.sin(theta)) 
             y = np.multiply(np.divide(vel, rot_vel), 1 - np.cos(theta)) 
 
@@ -200,7 +213,6 @@ class PathPlanner:
         
             points.append(point)
 
-        print(vel, rot_vel, theta)
         #return np.zeros((3, self.num_substeps))
         return np.reshape(np.array(points).T, (3,self.num_substeps))
 
@@ -225,9 +237,8 @@ class PathPlanner:
 
         R, C = np.array([]), np.array([])
         for r,c in cell.T:
-            # print("hi")
-            # print(r,c,np.ceil(self.robot_radius/self.map_settings_dict['resolution']))
-            rr,cc = circle(r,c,np.ceil(self.robot_radius/self.map_settings_dict['resolution']))
+
+            rr,cc = circle(r,c,np.ceil(self.robot_radius/self.map_settings_dict['resolution']), shape=self.map_shape)
             R = np.concatenate((R,rr))
             C = np.concatenate((C,cc))
 
@@ -267,6 +278,7 @@ class PathPlanner:
         goal_reached = False
         n = 0
         threshold_iter = 6969
+
         while not goal_reached: #Most likely need more iterations than this to complete the map!
 
             #Sample map space
@@ -282,14 +294,14 @@ class PathPlanner:
             #print("TO DO: Check for collisions and add safe points to list of nodes.")
             
             # get cell points of the robot circle along the simulated trajectory
-            R, C = self.points_to_robot_circle(trajectory_o[0:2,:])
+            R, C = self.points_to_robot_circle(trajectory_o[0:2,:].copy())
 
             # obstacles are False in the occupancy map
             # if there is collision
             if not any(self.occupancy_map[R,C]): continue 
 
             # append this collision-free node to our list
-            self.nodes.append(Node(trajectory_o[:,-1],closest_node_id,0))
+            self.nodes.append(Node(trajectory_o[:,-1].reshape((3,1)),closest_node_id,0))
 
             #Check if goal has been reached
             #print("TO DO: Check if at goal point.")
@@ -299,6 +311,8 @@ class PathPlanner:
             if n >= threshold_iter: break 
 
             n+=1
+
+            if n%1000 == 0: print("#:",n)
 
         return self.nodes
     
