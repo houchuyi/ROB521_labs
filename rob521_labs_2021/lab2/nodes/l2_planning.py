@@ -49,8 +49,8 @@ class PathPlanner:
 
         #Robot information
         self.robot_radius = 0.22 #m
-        self.vel_max = 1 #m/s (Feel free to change!)
-        self.rot_vel_max = 2 #0.2 #rad/s (Feel free to change!)
+        self.vel_max = 0.5 #m/s (Feel free to change!)
+        self.rot_vel_max = 3 #0.2 #rad/s (Feel free to change!)
 
         #Goal Parameters
         self.goal_point = goal_point #m
@@ -88,7 +88,8 @@ class PathPlanner:
         pt[1] = pt[1] * (self.bounds[1,1] - self.bounds[1,0]) + self.bounds[1,0]
      
         while self.check_if_duplicate(pt):
-            pt = np.random.rand((2,1))
+            pt[0] = np.random.rand(1)[0]
+            pt[1] = np.random.rand(1)[0]
             pt[0] = pt[0] * (self.bounds[0,1] - self.bounds[0,0]) + self.bounds[0,0]
             pt[1] = pt[1] * (self.bounds[1,1] - self.bounds[1,0]) + self.bounds[1,0]
 
@@ -99,7 +100,7 @@ class PathPlanner:
         #print("TO DO: Check that nodes are not duplicates")
         
         for node in self.nodes:
-            if np.linalg.norm(node.point[0:2]-point) < 0.001:
+            if np.linalg.norm(node.point[0:2]-point) < 0.3:
                 return True
         
         return False
@@ -127,7 +128,11 @@ class PathPlanner:
         vel, rot_vel = self.robot_controller(node_i, point_s)
 
         robot_traj = self.trajectory_rollout(vel, rot_vel)
-        return robot_traj + np.reshape(node_i,(3,1))
+        global_traj = robot_traj + np.reshape(node_i,(3,1))
+
+        global_traj[2, :] = [x - 2*np.pi if x > np.pi else x for x in global_traj[2, :]]
+        global_traj[2, :] = [x + 2*np.pi if x < -np.pi else x for x in global_traj[2, :]]
+        return global_traj
     
     def robot_controller(self, node_i, point_s):
         #This controller determines the velocities that will nominally move the robot from node i to node s
@@ -153,21 +158,19 @@ class PathPlanner:
         # theta needs to be within -pi and pi for this to work. If not, we should change this
         if angle_difference < 0:
             if np.abs(angle_difference) >= angle_threshold:
-                rot_vel = - self.rot_vel_max
-            else:
-                rot_vel = self.rot_vel_max * (angle_difference / angle_threshold)
+                angle_difference = (2 * np.pi + angle_difference)
+            rot_vel = self.rot_vel_max * (angle_difference / angle_threshold)
 
         elif angle_difference > 0:
             if np.abs(angle_difference) >= angle_threshold:
-                rot_vel = self.rot_vel_max
-            else:
-                rot_vel = - self.rot_vel_max * (angle_difference / angle_threshold)
+                angle_difference = -2 * np.pi + angle_difference
+            rot_vel = - self.rot_vel_max * (angle_difference / angle_threshold)
 
         elif angle_difference == 0:
             rot_vel = 0
 
         # depends on the distance, we set a reasonable linear velocity
-        dist_threshold = 1 # metres
+        dist_threshold = self.vel_max # metres
         dist = np.sqrt(np.square(dx)+np.square(dy))[0]
         if dist >= dist_threshold:
             vel = self.vel_max
@@ -238,7 +241,7 @@ class PathPlanner:
         R, C = np.array([]), np.array([])
         for r,c in cell.T:
 
-            rr,cc = circle(r,c,np.ceil(self.robot_radius/self.map_settings_dict['resolution']), shape=self.map_shape)
+            rr,cc = circle(r,c,self.robot_radius/self.map_settings_dict['resolution'], shape=self.map_shape)
             R = np.concatenate((R,rr))
             C = np.concatenate((C,cc))
 
@@ -326,7 +329,6 @@ class PathPlanner:
             point = self.sample_map_space()
             #Get the closest point
             closest_node_id = self.closest_node(point)
-            print(closest_node_id)
 
             #Simulate driving the robot towards the closest point
             trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point)
@@ -338,15 +340,25 @@ class PathPlanner:
             R, C = self.points_to_robot_circle(trajectory_o[0:2,:].copy())
             # print(R,C)
 
+            n+=1
+
+            if n%100 == 0: 
+                print("#:",n)
+                print("# of Nodes", len(self.nodes))
+
+
             # obstacles are False in the occupancy map
             # if there is collision
             if not all(self.occupancy_map[R,C]): 
                 continue 
 
+            if self.check_if_duplicate(trajectory_o[0:2,-1].reshape((2,1))):
+                continue
 
             # append this collision-free node to our list
             self.nodes.append(Node(trajectory_o[:,-1].reshape((3,1)),closest_node_id,0))
             self.nodes[closest_node_id].children_ids.append(len(self.nodes)-1)
+            
             self.window.add_point(trajectory_o[0:2,-1],color=(0, 255, 0))
 
             #Check if goal has been reached
@@ -358,10 +370,7 @@ class PathPlanner:
 
             if n >= threshold_iter: break 
 
-            n+=1
-
-            if n%1 == 100: print("#:",n)
-
+            
         return self.nodes
     
     def rrt_star_planning(self):
