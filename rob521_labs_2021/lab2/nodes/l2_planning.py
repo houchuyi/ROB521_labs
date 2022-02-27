@@ -49,8 +49,8 @@ class PathPlanner:
 
         #Robot information
         self.robot_radius = 0.22 #m
-        self.vel_max = 0.5 #m/s (Feel free to change!)
-        self.rot_vel_max = 3 #0.2 #rad/s (Feel free to change!)
+        self.vel_max = 0.3 #m/s (Feel free to change!)
+        self.rot_vel_max = 3.14 #0.2 #rad/s (Feel free to change!)
 
         #Goal Parameters
         self.goal_point = goal_point #m
@@ -80,13 +80,14 @@ class PathPlanner:
     def sample_map_space(self):
         #Return an [x,y] coordinate to drive the robot towards
         #print("TO DO: Sample point to drive towards")
+
         pt = np.zeros((2,1))
         pt[0] = np.random.rand(1)[0]
         pt[1] = np.random.rand(1)[0]
 
         pt[0] = pt[0] * (self.bounds[0,1] - self.bounds[0,0]) + self.bounds[0,0]
         pt[1] = pt[1] * (self.bounds[1,1] - self.bounds[1,0]) + self.bounds[1,0]
-     
+    
         while self.check_if_duplicate(pt):
             pt[0] = np.random.rand(1)[0]
             pt[1] = np.random.rand(1)[0]
@@ -100,7 +101,7 @@ class PathPlanner:
         #print("TO DO: Check that nodes are not duplicates")
         
         for node in self.nodes:
-            if np.linalg.norm(node.point[0:2]-point) < 0.3:
+            if np.linalg.norm(node.point[0:2]-point) < 0.2:
                 return True
         
         return False
@@ -145,37 +146,55 @@ class PathPlanner:
 
         # depends on the angle differnce between the pose of the robot and the direction it needs
         # to head towards, set a reasonable rotation velocity
-
-        dx = point_s[0] - node_i[0][0]
-        dy = point_s[1] - node_i[1][0]
-        theta_i_s = np.arctan2(dy,dx)[0]
-
-        theta = node_i[2][0] # pose of the robot
-        angle_threshold = np.pi
-
-        angle_difference = theta - theta_i_s
         
-        # theta needs to be within -pi and pi for this to work. If not, we should change this
-        if angle_difference < 0:
-            if np.abs(angle_difference) >= angle_threshold:
-                angle_difference = (2 * np.pi + angle_difference)
-            rot_vel = self.rot_vel_max * (angle_difference / angle_threshold)
+        dist = np.linalg.norm(point_s.reshape((2,1)) - node_i[0:2].reshape((2,1)))
+        angle = np.arctan2(point_s[1], point_s[0])[0] - node_i[2, 0]
+        if angle > np.pi:
+            angle = angle - 2 * np.pi
+        elif angle < -np.pi:
+            angle = angle + 2 * np.pi
+        dx = dist * np.cos(angle)
+        dy = dist * np.sin(angle)
+        # print(dist, angle, dx, dy)
 
-        elif angle_difference > 0:
-            if np.abs(angle_difference) >= angle_threshold:
-                angle_difference = -2 * np.pi + angle_difference
-            rot_vel = - self.rot_vel_max * (angle_difference / angle_threshold)
 
-        elif angle_difference == 0:
-            rot_vel = 0
+        vel = self.vel_max
+        rot_vel_t = 2 * np.arctan(dy/dx)
+        
+        t = dx * rot_vel_t / np.sin(rot_vel_t) / vel
+        rot_vel = rot_vel_t / t
+        
+        
+        # dx = point_s[0] - node_i[0][0]
+        # dy = point_s[1] - node_i[1][0]
+        # theta_i_s = np.arctan2(dy,dx)[0]
 
-        # depends on the distance, we set a reasonable linear velocity
-        dist_threshold = self.vel_max # metres
-        dist = np.sqrt(np.square(dx)+np.square(dy))[0]
-        if dist >= dist_threshold:
-            vel = self.vel_max
-        else:
-            vel = self.vel_max * dist / dist_threshold
+        # theta = node_i[2][0] # pose of the robot
+        # angle_threshold = np.pi
+
+        # angle_difference = theta - theta_i_s
+        
+        # # theta needs to be within -pi and pi for this to work. If not, we should change this
+        # if angle_difference < 0:
+        #     if np.abs(angle_difference) >= angle_threshold:
+        #         angle_difference = (2 * np.pi + angle_difference)
+        #     rot_vel = self.rot_vel_max * (angle_difference / angle_threshold)
+
+        # elif angle_difference > 0:
+        #     if np.abs(angle_difference) >= angle_threshold:
+        #         angle_difference = -2 * np.pi + angle_difference
+        #     rot_vel = - self.rot_vel_max * (angle_difference / angle_threshold)
+
+        # elif angle_difference == 0:
+        #     rot_vel = 0
+
+        # # depends on the distance, we set a reasonable linear velocity
+        # dist_threshold = self.vel_max # metres
+        # dist = np.sqrt(np.square(dx)+np.square(dy))[0]
+        # if dist >= dist_threshold:
+        #     vel = self.vel_max
+        # else:
+        #     vel = self.vel_max * dist / dist_threshold
 
         # determine the direction of rotation
         # the idea is to try a positive rotation vel first and see
@@ -198,7 +217,6 @@ class PathPlanner:
         # basically, the simulated new position and the old position
         # are on the same arc. In this case, the direction of the rotation
         # is actually correct. Hence, we are good
-
         return vel, rot_vel
 
     def trajectory_rollout(self, vel, rot_vel):
@@ -244,7 +262,6 @@ class PathPlanner:
             rr,cc = circle(r,c,self.robot_radius/self.map_settings_dict['resolution'], shape=self.map_shape)
             R = np.concatenate((R,rr))
             C = np.concatenate((C,cc))
-
         return R.astype(int), C.astype(int)
 
     #Note: If you have correctly completed all previous functions, then you should be able to create a working RRT function
@@ -324,6 +341,14 @@ class PathPlanner:
         n = 0
         threshold_iter = 69420
 
+        for i in range(0, self.map_shape[0]):
+            for j in range(0, self.map_shape[1]):
+                if np.flipud(self.occupancy_map)[j,i] == 0:
+                    x = self.map_settings_dict["origin"][0] + i * self.map_settings_dict["resolution"]
+                    y = self.map_settings_dict["origin"][1] + j * self.map_settings_dict["resolution"]
+                    self.window.add_point([x, y],color=(255, 0, 0))
+
+
         while not goal_reached: #Most likely need more iterations than this to complete the map!
             #Sample map space
             point = self.sample_map_space()
@@ -342,14 +367,15 @@ class PathPlanner:
 
             n+=1
 
-            if n%100 == 0: 
+            if n%1000 == 0: 
                 print("#:",n)
                 print("# of Nodes", len(self.nodes))
 
-
             # obstacles are False in the occupancy map
             # if there is collision
-            if not all(self.occupancy_map[R,C]): 
+
+            # if min(np.flipud(self.occupancy_map.T)[R,C]) == 0: 
+            if min(self.occupancy_map.T[R,C]) == 0: 
                 continue 
 
             if self.check_if_duplicate(trajectory_o[0:2,-1].reshape((2,1))):
@@ -357,6 +383,8 @@ class PathPlanner:
 
             # append this collision-free node to our list
             self.nodes.append(Node(trajectory_o[:,-1].reshape((3,1)),closest_node_id,0))
+            # print(trajectory_o[0:3,-1])
+
             self.nodes[closest_node_id].children_ids.append(len(self.nodes)-1)
             
             self.window.add_point(trajectory_o[0:2,-1],color=(0, 255, 0))
@@ -409,11 +437,12 @@ class PathPlanner:
 
 def main():
     #Set map information
-    map_filename = "willowgarageworld_05res.png"
-    map_setings_filename = "willowgarageworld_05res.yaml"
-
+    map_filename = "willowgarageworld_05res.png"#"simple_map.png"#
+    map_setings_filename = "willowgarageworld_05res.yaml"#"simple.yaml"#
+    # map_filename = "simple_map.png"
+    # map_setings_filename = "simple.yaml"
     #robot information
-    goal_point = np.array([[20], [-10]]) #m
+    goal_point = np.array([[10], [10]]) #m
     stopping_dist = 0.5 #m
 
     #RRT precursor
