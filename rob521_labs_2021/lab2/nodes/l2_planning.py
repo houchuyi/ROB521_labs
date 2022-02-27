@@ -277,7 +277,7 @@ class PathPlanner:
     
         goal_reached = False
         n = 0
-        threshold_iter = 6969
+        threshold_iter = 50000
 
         while not goal_reached: #Most likely need more iterations than this to complete the map!
 
@@ -298,7 +298,7 @@ class PathPlanner:
 
             # obstacles are False in the occupancy map
             # if there is collision
-            if not any(self.occupancy_map[R,C]): continue 
+            if not self.occupancy_map[R,C].any: continue 
 
             # append this collision-free node to our list
             self.nodes.append(Node(trajectory_o[:,-1].reshape((3,1)),closest_node_id,0))
