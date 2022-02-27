@@ -259,14 +259,36 @@ class PathPlanner:
         #point is a 2 by 1 point
         #print("TO DO: Implement a way to connect two already existing nodes (for rewiring).")
         
-        # check collision
+        dx = point_f[0] - node_i[0]
+        dy = point_f[1] - node_i[1]
+
+        # calculate rot_vel
+        t = 1
+        rot_vel = 2 * np.arctan(dy/dx)
+        if rot_vel > rot_vel_max:
+            t = rot_vel / rot_vel_max
+            rot_vel = rot_vel_max
         
+        vel = dx * rot_vel / np.sin(rot_vel * t)
+
+        # roll out
+        nt = np.ceil(t * self.num_substeps)
+        trajectory_o = np.zeros((3, nt))
+        tt = np.linspace(0, t, nt)
+
+        # obtain the new point (x,y,theta) using the unicycle model
+        trajectory_o[2, :] = rot_vel * tt
+        trajectory_o[0, :] = np.multiply(np.divide(vel, rot_vel), np.sin(trajectory_o[2, :])) 
+        trajectory_o[1, :] = np.multiply(np.divide(vel, rot_vel), 1 - np.cos(trajectory_o[2, :]))
+
+        # check collision
+        R, C = self.points_to_robot_circle(trajectory_o[0:2,:].copy())
 
         # if collision free
-        if any(self.occupancy_map[R,C]):
-            
-        
-        return np.zeros((3, self.num_substeps))
+        if all(self.occupancy_map[R,C]):
+            return trajectory_o
+        else:
+            return False
     
     def cost_to_come(self, trajectory_o):
         #The cost to get to a node from lavalle 
@@ -275,7 +297,7 @@ class PathPlanner:
         # Euclidean distance
         cost = 0
         for i in range(len(trajectory_o)-1):
-            cur_cost = np.linalg.norm(trajectory_o[i+1]-trajectory_o[i])
+            cur_cost = np.linalg.norm(trajectory_o[0:2, i+1]-trajectory_o[0:2, i])
             cost += cur_cost
 
         return cost
@@ -313,7 +335,7 @@ class PathPlanner:
 
             # obstacles are False in the occupancy map
             # if there is collision
-            if not any(self.occupancy_map[R,C]): continue 
+            if not all(self.occupancy_map[R,C]): continue 
 
             # append this collision-free node to our list
             self.nodes.append(Node(trajectory_o[:,-1].reshape((3,1)),closest_node_id,0))
