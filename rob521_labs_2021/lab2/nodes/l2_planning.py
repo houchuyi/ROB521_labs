@@ -257,13 +257,28 @@ class PathPlanner:
         #Settings
         #node is a 3 by 1 node
         #point is a 2 by 1 point
-        print("TO DO: Implement a way to connect two already existing nodes (for rewiring).")
+        #print("TO DO: Implement a way to connect two already existing nodes (for rewiring).")
+        
+        # check collision
+        
+
+        # if collision free
+        if any(self.occupancy_map[R,C]):
+            
+        
         return np.zeros((3, self.num_substeps))
     
     def cost_to_come(self, trajectory_o):
         #The cost to get to a node from lavalle 
-        print("TO DO: Implement a cost to come metric")
-        return 0
+        #print("TO DO: Implement a cost to come metric")
+        
+        # Euclidean distance
+        cost = 0
+        for i in range(len(trajectory_o)-1):
+            cur_cost = np.linalg.norm(trajectory_o[i+1]-trajectory_o[i])
+            cost += cur_cost
+
+        return cost
     
     def update_children(self, node_id):
         #Given a node_id with a changed cost, update all connected nodes with the new cost
@@ -277,7 +292,7 @@ class PathPlanner:
     
         goal_reached = False
         n = 0
-        threshold_iter = 6969
+        threshold_iter = 69420
 
         while not goal_reached: #Most likely need more iterations than this to complete the map!
 
