@@ -379,19 +379,24 @@ class PathPlanner:
         while not goal_reached: #Most likely need more iterations than this to complete the map!
 
             #Sample map space
-            point = self.sample_map_space()
+            point = self.sample_map_space([0,-12],[10,20])
 
             if n%200 == 0:
                 point = self.goal_point
             
-            elif n%205 == 0:
+            if n%205 == 0:
                 point = np.array([[40.5], [-45.2]])
             
-            elif n%210 == 0:
+            if n%210 == 0:
                 point = np.array([[41], [-44]])
+            
+            if lowest_d < 10:
+                point = self.sample_map_space()
 
-            elif lowest_d < 5 and n%50:
+            if lowest_d < 5 and n%10:
                 point = self.sample_map_space(offx,offy)
+                print(point)
+                self.window.add_point(point.flatten().copy(),color=(0, 255, 255))
 
             #Get the closest point
             closest_node_id = self.closest_node(point)
@@ -428,10 +433,12 @@ class PathPlanner:
             for i in range(10):
                 self.window.add_point(trajectory_o[0:2,i].copy(),color=(0, 255, 0))
 
-            if self.nodes[closest_node_id].opts.size == 0:
+            if self.nodes[closest_node_id].opts.size == 0 or self.nodes[closest_node_id].num_chosen >= 6:
                 print("Node is dead")
                 self.nodes[closest_node_id].is_dead = True
                 self.window.add_point(self.nodes[closest_node_id].point[0:2].copy().flatten(),color=(255, 0, 255))
+
+            self.nodes[closest_node_id].num_chosen += 1
 
             #Check if goal has been reached
             #print("TO DO: Check if at goal point.")
@@ -465,18 +472,21 @@ class PathPlanner:
         while not goal_reached: #Most likely need more iterations than this to complete the map!
 
             #Sample map space
-            point = self.sample_map_space()
+            point = self.sample_map_space([0,-12],[10,20])
 
             if n%200 == 0:
                 point = self.goal_point
             
-            elif n%205 == 0:
+            if n%205 == 0:
                 point = np.array([[40.5], [-45.2]])
             
-            elif n%210 == 0:
+            if n%210 == 0:
                 point = np.array([[41], [-44]])
+            
+            if lowest_d < 15:
+                point = self.sample_map_space()
 
-            elif lowest_d < 5 and n%50:
+            if lowest_d < 5 and n%50:
                 point = self.sample_map_space(offx,offy)
 
             #Get the closest point
@@ -546,10 +556,12 @@ class PathPlanner:
 
             self.window.add_point(self.nodes[-1].point[0:2].copy().flatten(),color=(0, 255, 0))
 
-            if self.nodes[closest_node_id].opts.size == 0:
+            if self.nodes[closest_node_id].opts.size == 0 or self.nodes[closest_node_id].num_chosen >= 6:
                 print("Node is dead")
-                self.nodes[closest_node_id].is_dead = True
+                self.nodes[closest_node_id].is_dead = True 
                 self.window.add_point(self.nodes[closest_node_id].point[0:2].copy().flatten(),color=(255, 0, 255))
+
+            self.nodes[closest_node_id].num_chosen += 1
 
             #Check if goal has been reached
             #print("TO DO: Check if at goal point.")
@@ -582,14 +594,14 @@ def main():
     # map_filename = "simple_map.png"
     # map_setings_filename = "simple.yaml"
     #robot information
-    goal_point = np.array([[41.7], [-44.2]]) #np.array([[30], [-20]])# np.array([[42], [-45]]) #m
+    goal_point = np.array([[41.7], [-44.2]])#np.array([[30], [-20]])# # np.array([[42], [-45]]) #m
     stopping_dist = 0.5 #m
 
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
 
     start = time.time()
-    nodes = path_planner.rrt_star_planning()
+    nodes = path_planner.rrt_planning()
     node_path_metric = np.hstack(path_planner.recover_path())
 
     #Leftover test functions
@@ -597,7 +609,7 @@ def main():
     
     end = time.time()
     print("Path Planning Time Elapsed:", end-start)
-    
+
     time.sleep(5000)
 
 
