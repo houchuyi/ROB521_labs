@@ -500,6 +500,8 @@ class PathPlanner:
 
             # obstacles are False in the occupancy map
             # if there is collision
+            if self.occupancy_map[R, C].size == 0:
+                continue
             if np.min(self.occupancy_map[R, C]) <= 0:
                 continue
 
@@ -590,6 +592,8 @@ def main():
 
     start = time.time()
     nodes = path_planner.rrt_star_planning()
+    path_planner.save_image('foo.png')
+    print('path_planning finished, recovering path...')
     node_path_metric = np.hstack(path_planner.recover_path())
 
     #Leftover test functions

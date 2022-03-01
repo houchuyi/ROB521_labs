@@ -81,3 +81,6 @@ class PygameWindow:
         for e in pygame.event.get():
             if e.type == QUIT or (e.type == KEYUP and e.key == K_ESCAPE):
                 sys.exit("Closing planner.")
+
+    def save_image(self, filename):
+        pygame.image.save(filename)
