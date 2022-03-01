@@ -40,27 +40,34 @@ class PathFollower():
         # time full path
         self.path_follow_start_time = rospy.Time.now()
 
+        print("1")
         # use tf2 buffer to access transforms between existing frames in tf tree
         self.tf_buffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tf_buffer)
-        rospy.sleep(1.0)  # time to get buffer running
+        rospy.sleep(2.0)  # time to get buffer running
 
+
+        print("2")
         # constant transforms
         self.map_odom_tf = self.tf_buffer.lookup_transform('map', 'odom', rospy.Time(0), rospy.Duration(2.0)).transform
 
+        print("3")
         # subscribers and publishers
         self.cmd_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
         self.global_path_pub = rospy.Publisher('~global_path', Path, queue_size=1, latch=True)
         self.local_path_pub = rospy.Publisher('~local_path', Path, queue_size=1)
         self.collision_marker_pub = rospy.Publisher('~collision_marker', Marker, queue_size=1)
 
+        print("4")
         # map
         map = rospy.wait_for_message('/map', OccupancyGrid)
+        print("4.5")
         self.map_np = np.array(map.data).reshape(map.info.height, map.info.width)
         self.map_resolution = round(map.info.resolution, 5)
         self.map_origin = -utils.se2_pose_from_pose(map.info.origin)  # negative because of weird way origin is stored
         self.map_nonzero_idxes = np.argwhere(self.map_np)
 
+        print("5")
         # collisions
         self.collision_radius_pix = COLLISION_RADIUS / self.map_resolution
         self.collision_marker = Marker()
@@ -75,6 +82,7 @@ class PathFollower():
         self.collision_marker.color.g = 1.0
         self.collision_marker.color.a = 0.5
 
+        print("6")
         # transforms
         self.map_baselink_tf = self.tf_buffer.lookup_transform('map', 'base_link', rospy.Time(0), rospy.Duration(2.0))
         self.pose_in_map_np = np.zeros(3)
@@ -220,10 +228,10 @@ class PathFollower():
             local_paths_lowest_collision_dist = np.ones(self.num_opts) * 50
 
             # print("TO DO: Check the points in local_path_pixels for collisions")
-            collision = np.zeros([self.horizon_timesteps + 1, self.num_opts])
-            for opt in range(local_paths_pixels.shape[1]):
-                for timestep in range(local_paths_pixels.shape[0]):
-                    pass
+            # collision = np.zeros([self.horizon_timesteps + 1, self.num_opts])
+            # for opt in range(local_paths_pixels.shape[1]):
+            #     for timestep in range(local_paths_pixels.shape[0]):
+            #         pass
             print(local_paths_pixels, local_paths_pixels.shape)
 
             # remove trajectories that were deemed to have collisions
@@ -285,7 +293,9 @@ class PathFollower():
 
 if __name__ == '__main__':
     try:
+
         rospy.init_node('path_follower', log_level=rospy.DEBUG)
         pf = PathFollower()
+
     except rospy.ROSInterruptException:
         pass
