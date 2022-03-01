@@ -113,6 +113,89 @@ class PathFollower():
         rospy.on_shutdown(self.stop_robot_on_shutdown)
         self.follow_path()
 
+    def simulate_trajectory(self, node_i, point_s):
+        vel, rot_vel = self.robot_controller(node_i, point_s)
+
+        robot_traj = self.trajectory_rollout(vel, rot_vel)
+
+        base_theta = node_i.point[2,0]
+
+        robot_dist = np.sqrt(np.square(robot_traj[0,:]) + np.square(robot_traj[1,:]))
+
+        robot_traj[1,:] = robot_dist * np.sin(base_theta+robot_traj[2,:])
+        robot_traj[0,:] = robot_dist * np.cos(base_theta+robot_traj[2,:])
+
+        robot_traj[2, :] = [x - 2*np.pi if x > np.pi else x for x in robot_traj[2, :]]
+        robot_traj[2, :] = [x + 2*np.pi if x < -np.pi else x for x in robot_traj[2, :]]
+
+        global_traj = robot_traj + np.reshape(node_i.point,(3,1))
+
+        return global_traj
+
+    def robot_controller(self, node_i, point_s):
+        n = 8
+        vels = node_i.vels
+        rot_vels = node_i.rot_vels
+        vel, rot_vel = None, None
+        min_dist = np.linalg.norm(point_s.copy()-node_i.point.copy()[0:2])
+
+        base_theta = node_i.point[2,0].copy()
+
+        delete_vel, delete_rot_vel = [], []
+        delete_i, delete_j = None, None
+        for i in range(len(vels)):
+            for j in range(len(rot_vels)):
+
+                robot_traj = self.trajectory_rollout(vels[i],rot_vels[j])
+
+                # line segment distance
+                robot_dist = np.sqrt(np.square(robot_traj[0,:].copy()) + np.square(robot_traj[1,:].copy()))
+
+                # line segment x, y in global frame
+                robot_traj[1,:] = robot_dist * np.sin(robot_traj[2,:]+base_theta.copy())
+                robot_traj[0,:] = robot_dist * np.cos(robot_traj[2,:]+base_theta.copy())
+
+                global_traj = robot_traj + np.reshape(node_i.point,(3,1))
+
+                R, C = self.points_to_robot_circle(global_traj[0:2,:].copy())
+
+                if np.min(self.occupancy_map[R, C]) <= 0:
+                    delete_vel.append(i)
+                    delete_rot_vel.append(j)
+                    continue
+
+                dist = np.linalg.norm(global_traj[0:2,-1].copy()-point_s.copy().flatten())
+
+                if dist < min_dist:
+                    min_dist = dist
+                    vel, rot_vel = vels[i], rot_vels[j]
+                    delete_i,delete_j = i, j
+
+        if delete_i is None and delete_j is None:
+            vel, rot_vel = 0.01,0.01
+        else:
+            delete_vel.append(delete_i)
+            delete_rot_vel.append(delete_j)
+            node_i.vels = np.delete(node_i.vels,delete_vel)
+            node_i.rot_vels = np.delete(node_i.rot_vels,delete_rot_vel)
+
+        return vel, rot_vel
+
+    def trajectory_rollout(self, vel, rot_vel):
+        nt = self.horizon_timesteps
+        no = self.num_opts
+        trajectory_o = np.zeros((nt, no, 3))
+        tt = np.linspace(1, nt, nt)
+
+        # obtain the new point (x,y,theta) using the unicycle model
+        trajectory_o[:, :, 2] = np.dot(tt.reshape(-1, 1), rot_vel.reshape(1, -1))
+        trajectory_o[:, :, 0] = np.array([x.reshape(-1, 1) * np.divide(vel, rot_vel) for x in np.sin(trajectory_o[:, :, 2])])
+        trajectory_o[:, :, 1] = np.array([x.reshape(-1, 1) * np.divide(vel, rot_vel) for x in (1 - np.cos(trajectory_o[:, :, 2]))])
+        trajectory_o[:, :, 2] = [x - 2*np.pi if x > np.pi else x for x in trajectory_o[:, :, 2]]
+        trajectory_o[:, :, 2] = [x + 2*np.pi if x < -np.pi else x for x in trajectory_o[:, :, 2]]
+
+        return trajectory_o
+
     def follow_path(self):
         while not rospy.is_shutdown():
             # timing for debugging...loop time should be less than 1/CONTROL_RATE
@@ -125,10 +208,10 @@ class PathFollower():
             local_paths = np.zeros([self.horizon_timesteps + 1, self.num_opts, 3])
             local_paths[0] = np.atleast_2d(self.pose_in_map_np).repeat(self.num_opts, axis=0)
 
-            print("TO DO: Propogate the trajectory forward, storing the resulting points in local_paths!")
-            for t in range(1, self.horizon_timesteps + 1):
-                # propogate trajectory forward, assuming perfect control of velocity and no dynamic effects
-                pass
+            # print("TO DO: Propogate the trajectory forward, storing the resulting points in local_paths!")
+            vel = self.all_opts_scaled[:, 0]
+            rot_vel = self.all_opts_scaled[:, 1]
+            local_paths[1:self.horizon_timesteps, :, :] = trajectory_rollout(vel, rot_vel)
 
             # check all trajectory points for collisions
             # first find the closest collision point in the map to each local path point
@@ -136,10 +219,12 @@ class PathFollower():
             valid_opts = range(self.num_opts)
             local_paths_lowest_collision_dist = np.ones(self.num_opts) * 50
 
-            print("TO DO: Check the points in local_path_pixels for collisions")
+            # print("TO DO: Check the points in local_path_pixels for collisions")
+            collision = np.zeros([self.horizon_timesteps + 1, self.num_opts])
             for opt in range(local_paths_pixels.shape[1]):
                 for timestep in range(local_paths_pixels.shape[0]):
                     pass
+            print(local_paths_pixels, local_paths_pixels.shape)
 
             # remove trajectories that were deemed to have collisions
             print("TO DO: Remove trajectories with collisions!")

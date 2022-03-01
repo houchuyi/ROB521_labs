@@ -14,7 +14,7 @@ from scipy.linalg import block_diag
 def load_map(filename):
     im = mpimg.imread("../maps/" + filename)
     im_np = np.array(im)  #Whitespace is true, black is false
-    #im_np = np.logical_not(im_np)    
+    #im_np = np.logical_not(im_np)
     return im_np
 
 def load_map_yaml(filename):
@@ -24,11 +24,12 @@ def load_map_yaml(filename):
 
 #Node for building a graph
 class Node:
-    def __init__(self, point, parent_id, cost):
+    def __init__(self, point, parent_id, trajectory, cost):
         self.point = point # A 3 by 1 vector [x, y, theta]
         self.parent_id = parent_id # The parent node id that leads to this node (There should only every be one parent in RRT)
         self.cost = cost # The cost to come to this node
         self.children_ids = [] # The children node ids of this node
+        self.traj_from_parent = trajectory
         n = 6
         self.vels = np.linspace(0.01,0.5,n)
         self.rot_vels = np.linspace(-1.1,1.1,n)
@@ -36,7 +37,7 @@ class Node:
         self.is_dead = False # If the node is a dead end
         return
 
-#Path Planner 
+#Path Planner
 class PathPlanner:
     #A path planner capable of perfomring RRT and RRT*
     def __init__(self, map_filename, map_setings_filename, goal_point, stopping_dist):
@@ -66,7 +67,7 @@ class PathPlanner:
         self.num_substeps = 10
 
         #Planning storage
-        self.nodes = [Node(np.zeros((3,1)), -1, 0)]
+        self.nodes = [Node(np.zeros((3,1)), -1, [], 0)]
 
         #RRT* Specific Parameters
         self.lebesgue_free = np.sum(self.occupancy_map) * self.map_settings_dict["resolution"] **2
@@ -74,7 +75,7 @@ class PathPlanner:
         self.gamma_RRT_star = 2 * (1 + 1/2) ** (1/2) * (self.lebesgue_free / self.zeta_d) ** (1/2)
         self.gamma_RRT = self.gamma_RRT_star + .1
         self.epsilon = 2.5
-        
+
         #Pygame window for visualization
         self.window = pygame_utils.PygameWindow(
             "Path Planner", (1000, 1000), self.occupancy_map.shape, self.map_settings_dict, self.goal_point, self.stopping_dist)
@@ -92,17 +93,17 @@ class PathPlanner:
         #     pt_y = np.random.uniform(low=self.bounds[1,0]+offy[0], high=offy[1], size=1)
         #     pt = np.array([pt_x,pt_y])
         return pt
-    
+
     def check_if_duplicate(self, point):
         #Check if point is a duplicate of an already existing node
         #print("TO DO: Check that nodes are not duplicates")
-        
+
         for node in self.nodes:
             if np.linalg.norm(node.point[0:2,:].reshape((2,1))-point.reshape((2,1))) < 0.1:
                 return True
-        
+
         return False
-    
+
     def closest_node(self, point):
         #Returns the index of the closest node
         #print("TO DO: Implement a method to get the closest node to a sapled point")
@@ -119,19 +120,25 @@ class PathPlanner:
                 min_dist = distance
                 min_idx = i
 
-            # if node.vels.size == 0 and node.rot_vels.size == 0:
-            #     node.is_dead = True
-            #     print("Node is dead:", i)
-            #     self.window.add_point(node.point[0:2].copy().flatten(),color=(255, 0, 0))
-
-        # # set the current min node to dead is it is chosen 6 times 
-        # if self.nodes[min_idx].num_chosen >= 4: 
-        #     print("Node is dead:", min_idx)
-        #     self.window.add_point(self.nodes[min_idx].point[0:2].copy().flatten(),color=(255, 0, 0))
-        #     self.nodes[min_idx].is_dead = True
-
         return min_idx
-    
+
+    def near_node(self, node_id):
+        #Returns the index of near nodes
+        threshold = 0.5
+        d_list = []
+        node = self.nodes[node_id]
+        for i, n in enumerate(self.nodes):
+            if i == node_id:
+                continue
+            point1 = np.array([n.point[0],n.point[1]])
+            point2 = np.array([node.point[0],node.point[1]])
+
+            distance = np.linalg.norm(point1-point2)
+            if distance < threshold and not node.is_dead:
+                d_list.append(i)
+
+        return d_list
+
     def simulate_trajectory(self, node_i, point_s):
         #Simulates the non-holonomic motion of the robot.
         #This function drives the robot from node_i towards point_s. This function does has many solutions!
@@ -156,7 +163,7 @@ class PathPlanner:
         global_traj = robot_traj + np.reshape(node_i.point,(3,1))
 
         return global_traj
-    
+
     def robot_controller(self, node_i, point_s):
         #This controller determines the velocities that will nominally move the robot from node i to node s
         #Max velocities should be enforced
@@ -168,7 +175,7 @@ class PathPlanner:
 
         # depends on the angle differnce between the pose of the robot and the direction it needs
         # to head towards, set a reasonable rotation velocit
-    
+
         # dist = np.linalg.norm(point_s.reshape((2,1)) - node_i[0:2].reshape((2,1)))
         # # dist = self.vel_max
         # angle = np.arctan2(point_s[1], point_s[0])[0] - node_i[2, 0]
@@ -181,7 +188,7 @@ class PathPlanner:
 
         # vel = self.vel_max
         # rot_vel_t = 2 * np.arctan2(dy, dx)
-        
+
         # t = dx * rot_vel_t / np.sin(rot_vel_t) / vel
         # if t > 2:
         #     t = 2
@@ -190,7 +197,7 @@ class PathPlanner:
         # vel = vel / max([t, 1])
         # if vel > self.vel_max:
         #     vel = self.vel_max
-        # rot_vel = rot_vel_t / t  # * (dist / self.vel_max / 2) 
+        # rot_vel = rot_vel_t / t  # * (dist / self.vel_max / 2)
         # if rot_vel > self.rot_vel_max:
         #     rot_vel = self.rot_vel_max
         # elif rot_vel < - self.rot_vel_max:
@@ -255,7 +262,7 @@ class PathPlanner:
 
         # obtain the new point (x,y,theta) using the unicycle model
         trajectory_o[2, :] = rot_vel * tt
-        trajectory_o[0, :] = np.multiply(np.divide(vel, rot_vel), np.sin(trajectory_o[2, :])) 
+        trajectory_o[0, :] = np.multiply(np.divide(vel, rot_vel), np.sin(trajectory_o[2, :]))
         trajectory_o[1, :] = np.multiply(np.divide(vel, rot_vel), 1 - np.cos(trajectory_o[2, :]))
         trajectory_o[2, :] = [x - 2*np.pi if x > np.pi else x for x in trajectory_o[2, :]]
         trajectory_o[2, :] = [x + 2*np.pi if x < -np.pi else x for x in trajectory_o[2, :]]
@@ -278,7 +285,7 @@ class PathPlanner:
         #print("TO DO: Implement a method to get the pixel locations of the robot path")
 
         # obtain pixel coordinates (cell) of the points
-        cell = self.point_to_cell(points.copy())  
+        cell = self.point_to_cell(points.copy())
         R, C = np.array([]), np.array([])
         for r, c in cell.T:
 
@@ -294,51 +301,63 @@ class PathPlanner:
         #Close neighbor distance
         card_V = len(self.nodes)
         return min(self.gamma_RRT * (np.log(card_V) / card_V ) ** (1.0/2.0), self.epsilon)
-    
+
     def connect_node_to_point(self, node_i, point_f):
         #Given two nodes find the non-holonomic path that connects them
         #Settings
         #node is a 3 by 1 node
         #point is a 2 by 1 point
         #print("TO DO: Implement a way to connect two already existing nodes (for rewiring).")
-        
-        dx = point_f[0] - node_i[0]
-        dy = point_f[1] - node_i[1]
+
+        dx = point_f[0] - node_i.point[0]
+        dy = point_f[1] - node_i.point[1]
 
         # calculate rot_vel
         t = 1
-        rot_vel = 2 * np.arctan(dy/dx)
-        if rot_vel > rot_vel_max:
-            t = rot_vel / rot_vel_max
-            rot_vel = rot_vel_max
-        
+        rot_vel = 2 * (np.arctan(dy/dx)) + node_i.point[2]
+        if rot_vel > self.rot_vel_max:
+            t = (rot_vel / self.rot_vel_max)[0]
+            rot_vel = self.rot_vel_max
+
         vel = dx * rot_vel / np.sin(rot_vel * t)
 
+        if vel >= self.vel_max:
+
+            # if a larger linear vel is required, then no solution,
+            # cannot connnect these two nodes
+            return np.array([])
+
         # roll out
-        nt = np.ceil(t * self.num_substeps)
+        nt = np.ceil(t * self.num_substeps).astype(int)
         trajectory_o = np.zeros((3, nt))
         tt = np.linspace(0, t, nt)
 
         # obtain the new point (x,y,theta) using the unicycle model
         trajectory_o[2, :] = rot_vel * tt
-        trajectory_o[0, :] = np.multiply(np.divide(vel, rot_vel), np.sin(trajectory_o[2, :])) 
+        trajectory_o[0, :] = np.multiply(np.divide(vel, rot_vel), np.sin(trajectory_o[2, :]))
         trajectory_o[1, :] = np.multiply(np.divide(vel, rot_vel), 1 - np.cos(trajectory_o[2, :]))
         trajectory_o[2, :] = [x - 2*np.pi if x > np.pi else x for x in trajectory_o[2, :]]
         trajectory_o[2, :] = [x + 2*np.pi if x < -np.pi else x for x in trajectory_o[2, :]]
 
-        # check collision
-        R, C = self.points_to_robot_circle(trajectory_o[0:2,:].copy())
+        # line segment distance
+        robot_traj = trajectory_o
+        robot_dist = np.sqrt(np.square(robot_traj[0,:].copy()) + np.square(robot_traj[1,:].copy()))
 
-        # if collision free
-        if all(self.occupancy_map[R,C]):
-            return trajectory_o
-        else:
-            return False
-    
+        # line segment x, y in global frame
+        robot_traj[1,:] = robot_dist * np.sin(robot_traj[2,:]+node_i.point[2])
+        robot_traj[0,:] = robot_dist * np.cos(robot_traj[2,:]+node_i.point[2])
+
+        global_traj = robot_traj + np.reshape(node_i.point,(3,1))
+
+        if np.isnan(global_traj).any():
+            return np.array([])
+
+        return global_traj
+
     def cost_to_come(self, trajectory_o):
-        #The cost to get to a node from lavalle 
+        #The cost to get to a node from lavalle
         #print("TO DO: Implement a cost to come metric")
-        
+
         # Euclidean distance
         cost = 0
         for i in range(len(trajectory_o)-1):
@@ -346,20 +365,24 @@ class PathPlanner:
             cost += cur_cost
 
         return cost
-    
+
     def update_children(self, node_id):
         #Given a node_id with a changed cost, update all connected nodes with the new cost
         # print("TO DO: Update the costs of connected nodes after rewiring.")
 
-
+        # ????
+        self.nodes[node_id].cost += self.cost_to_come(self.nodes[node_id].traj_from_parent)
+        for child_id in self.nodes[node_id].children_ids:
+            self.update_children(child_id)
 
         return
+
 
     #Planner Functions
     def rrt_planning(self):
         #This function performs RRT on the given map and robot
         #You do not need to demonstrate this function to the TAs, but it is left in for you to check your work
-    
+
         goal_reached = False
         n = 0
         threshold_iter = 69420
@@ -382,7 +405,7 @@ class PathPlanner:
 
             #Simulate driving the robot towards the closest point
             trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id], point)
-            
+
             #Check for collisions
             #print("TO DO: Check for collisions and add safe points to list of nodes.")
 
@@ -392,7 +415,7 @@ class PathPlanner:
 
             n+=1
 
-            if n%1000 == 0: 
+            if n%1000 == 0:
                 print("#:",n)
                 print("# of Nodes", len(self.nodes))
 
@@ -404,7 +427,7 @@ class PathPlanner:
             # self.window.add_point(point.flatten().copy(),color=(0, 0, 255))
 
             # append this collision-free node to our list
-            self.nodes.append(Node(trajectory_o[:,-1].reshape((3,1)).copy(),closest_node_id,0))
+            self.nodes.append(Node(trajectory_o[:,-1].reshape((3,1)).copy(),closest_node_id, trajectory_o, 0))
             self.nodes[closest_node_id].children_ids.append(len(self.nodes)-1)
 
             # self.window.add_point(trajectory_o[0:2,-1].copy(),color=(0, 255, 0))
@@ -426,35 +449,114 @@ class PathPlanner:
             if np.linalg.norm(trajectory_o[0:2,-1].reshape((2,1))-self.goal_point) <= self.stopping_dist:
                 goal_reached = True
 
-            if n >= threshold_iter: break 
-            
+            if n >= threshold_iter: break
+
         return self.nodes
-    
+
     def rrt_star_planning(self):
-        #This function performs RRT* for the given map and robot        
-        for i in range(1): #Most likely need more iterations than this to complete the map!
-            #Sample
+        #This function performs RRT* for the given map and robot
+        goal_reached = False
+        n = 0
+        threshold_iter = 69420
+
+        lowest_d = 9999
+
+        while not goal_reached: #Most likely need more iterations than this to complete the map!
+
+            #Sample map space
             point = self.sample_map_space()
 
-            #Closest Node
+            if n%300 == 0:
+                point = self.goal_point
+
+            if lowest_d < 5 and n%100:
+                    point = self.goal_point
+
+            #Get the closest point
             closest_node_id = self.closest_node(point)
 
-            #Simulate trajectory
-            trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point)
+            #Simulate driving the robot towards the closest point
+            trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id], point)
 
-            #Check for Collision
-            print("TO DO: Check for collision.")
+            #Check for collisions
+            #print("TO DO: Check for collisions and add safe points to list of nodes.")
+
+            # get cell points of the robot circle along the simulated trajectory
+            R, C = self.points_to_robot_circle(trajectory_o[0:2,:].copy())
+            # print(R,C)
+
+            n+=1
+
+            if n%1000 == 0:
+                print("#:",n)
+                print("# of Nodes", len(self.nodes))
+
+            # obstacles are False in the occupancy map
+            # if there is collision
+            if np.min(self.occupancy_map[R, C]) <= 0:
+                continue
+
+            # self.window.add_point(point.flatten().copy(),color=(0, 0, 255))
+
+            # append this collision-free node to our list
+            self.nodes.append(Node(trajectory_o[:,-1].reshape((3,1)).copy(), closest_node_id, trajectory_o, self.nodes[closest_node_id].cost + self.cost_to_come(trajectory_o.copy())))
+            self.nodes[closest_node_id].children_ids.append(len(self.nodes)-1)
+
+            # find near nodes
+            nn = self.near_node(len(self.nodes) -1)
+            node_min_id = closest_node_id
+            cost_min = self.nodes[closest_node_id].cost + self.cost_to_come(trajectory_o.copy())
+
+            for node_id in nn:
+                traj = self.connect_node_to_point(self.nodes[node_id], self.nodes[-1].point)
+                if traj.size != 0:
+                    # print(traj)
+                    R, C = self.points_to_robot_circle(traj[0:2,:].copy())
+                    if np.min(self.occupancy_map[R, C]) <= 0:
+                        continue
+                    if self.cost_to_come(traj.copy()) + self.nodes[node_id].cost < cost_min:
+                        node_min_id = node_id
+                        cost_min = self.cost_to_come(traj.copy()) + self.nodes[node_id].cost
 
             #Last node rewire
-            print("TO DO: Last node rewiring")
+            # print("TO DO: Last node rewiring")
+            self.nodes[-1].parent_id = node_min_id
 
             #Close node rewire
-            print("TO DO: Near point rewiring")
+            # print("TO DO: Near point rewiring")
+            for node_id in nn:
+                traj = self.connect_node_to_point(self.nodes[-1], self.nodes[node_id].point)
+                if traj.size != 0:
+                    R, C = self.points_to_robot_circle(traj[0:2,:].copy())
+                    if np.min(self.occupancy_map[R, C]) <= 0:
+                        continue
+                    if self.cost_to_come(traj.copy()) + self.nodes[-1].cost < self.nodes[node_id].cost:
+                        self.nodes[node_id].parent_id = len(self.nodes) - 1
+                        self.nodes[node_id].cost = self.cost_to_come(traj.copy()) + self.nodes[-1].cost
+                        self.nodes[node_id].traj_from_parent = traj
 
-            #Check for early end
-            print("TO DO: Check for early end")
+            self.update_children(len(self.nodes) - 1)
+
+            self.window.add_point(self.nodes[-1].point[0:2].copy().flatten(),color=(0, 255, 0))
+
+            if self.nodes[closest_node_id].vels.size == 0 and self.nodes[closest_node_id].rot_vels.size == 0:
+                print("Node is dead")
+                self.nodes[closest_node_id].is_dead = True
+                self.window.add_point(self.nodes[closest_node_id].point[0:2].copy().flatten(),color=(255, 0, 255))
+
+            #Check if goal has been reached
+            #print("TO DO: Check if at goal point.")
+            d = np.linalg.norm(trajectory_o[0:2,-1].reshape((2,1))-self.goal_point)
+            if d < lowest_d:
+                lowest_d = d
+                print('closest dist to goal: ', lowest_d)
+            if np.linalg.norm(trajectory_o[0:2,-1].reshape((2,1))-self.goal_point) <= self.stopping_dist:
+                goal_reached = True
+
+            if n >= threshold_iter: break
+
         return self.nodes
-    
+
     def recover_path(self, node_id = -1):
         path = [self.nodes[node_id].point]
         current_node_id = self.nodes[node_id].parent_id
@@ -479,11 +581,12 @@ def main():
 
 
     start = time.time()
-    nodes = path_planner.rrt_planning()
+    nodes = path_planner.rrt_star_planning()
     node_path_metric = np.hstack(path_planner.recover_path())
 
     #Leftover test functions
     np.save("shortest_path.npy", node_path_metric)
+    time.sleep(5000)
 
     end = time.time()
     print("Path Planning Time Elapsed:", end-start)
