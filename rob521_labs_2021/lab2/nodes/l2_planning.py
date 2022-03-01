@@ -532,7 +532,7 @@ class PathPlanner:
 
             self.window.add_point(self.nodes[-1].point[0:2].copy().flatten(),color=(0, 255, 0))
 
-            if self.nodes[closest_node_id].vels.size == 0 and self.nodes[closest_node_id].rot_vels.size == 0:
+            if self.nodes[closest_node_id].opts.size == 0:
                 print("Node is dead")
                 self.nodes[closest_node_id].is_dead = True
                 self.window.add_point(self.nodes[closest_node_id].point[0:2].copy().flatten(),color=(255, 0, 255))
