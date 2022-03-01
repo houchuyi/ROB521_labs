@@ -30,8 +30,8 @@ class Node:
         self.cost = cost # The cost to come to this node
         self.children_ids = [] # The children node ids of this node
         n = 6
-        self.vels = np.linspace(0.01,0.6,n)
-        self.rot_vels = np.linspace(-0.9,0.9,n)
+        self.vels = np.linspace(0.01,0.5,n)
+        self.rot_vels = np.linspace(-1.1,1.1,n)
         self.num_chosen = 0 # The number of times it is chosen as the closest point
         self.is_dead = False # If the node is a dead end
         return
@@ -81,7 +81,7 @@ class PathPlanner:
         return
 
     #Functions required for RRT
-    def sample_map_space(self,offx=[-5,-15],offy=[3,20]):
+    def sample_map_space(self,offx=[-2,0],offy=[0,20]):
         #Return an [x,y] coordinate to drive the robot towards
         #print("TO DO: Sample point to drive towards")
         pt_x = np.random.uniform(low=offx[0], high=self.bounds[0,1]+offx[1], size=1)
@@ -115,7 +115,7 @@ class PathPlanner:
             point2 = np.array([point[0],point[1]])
 
             distance = np.linalg.norm(point1-point2)
-            if distance < min_dist and not node.is_dead and node.vels.size!=0 and node.rot_vels.size!=0:
+            if distance < min_dist and not node.is_dead:
                 min_dist = distance
                 min_idx = i
 
@@ -242,9 +242,6 @@ class PathPlanner:
             node_i.vels = np.delete(node_i.vels,delete_vel)
             node_i.rot_vels = np.delete(node_i.rot_vels,delete_rot_vel)
 
-        if node_i.vels.size == 0 and node_i.rot_vels.size == 0:
-            print("Node is dead")
-            self.window.add_point(node_i.point[0:2].copy().flatten(),color=(255, 0, 0))
         return vel, rot_vel
 
     def trajectory_rollout(self, vel, rot_vel):
@@ -369,20 +366,15 @@ class PathPlanner:
 
         lowest_d = 9999
 
-        offx=[self.goal_point[0,0]-7,self.goal_point[0,0]+7-self.bounds[0,1]]
-        offy=[self.goal_point[1,0]-7-self.bounds[1,0],self.goal_point[1,0]+7]
-
         while not goal_reached: #Most likely need more iterations than this to complete the map!
 
             #Sample map space
             point = self.sample_map_space()
 
             if n%300 == 0:
-                point = self.sample_map_space(offx,offy)
-            if lowest_d < 5: 
-                if n%20:
-                    point = self.sample_map_space(offx,offy)
-                if n%100:
+                point = self.goal_point
+
+            if lowest_d < 5 and n%100:
                     point = self.goal_point
 
             #Get the closest point
@@ -391,7 +383,6 @@ class PathPlanner:
             #Simulate driving the robot towards the closest point
             trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id], point)
             
-            # print(self.nodes[closest_node_id].point, point)
             #Check for collisions
             #print("TO DO: Check for collisions and add safe points to list of nodes.")
 
@@ -407,14 +398,10 @@ class PathPlanner:
 
             # obstacles are False in the occupancy map
             # if there is collision
-            if np.min(self.occupancy_map[R, C]) <= 0 or self.check_if_duplicate(trajectory_o[0:2,-1]):
-                # print("Closet node dead",closest_node_id)
-                # self.nodes[closest_node_id].is_dead = True
-                # self.window.add_point(self.nodes[closest_node_id].point[0:2].copy().flatten(), color=(255,0,0))
-                self.nodes[closest_node_id].num_chosen += 1
+            if np.min(self.occupancy_map[R, C]) <= 0:
                 continue
 
-            self.window.add_point(point.flatten().copy(),color=(0, 0, 255))
+            # self.window.add_point(point.flatten().copy(),color=(0, 0, 255))
 
             # append this collision-free node to our list
             self.nodes.append(Node(trajectory_o[:,-1].reshape((3,1)).copy(),closest_node_id,0))
@@ -424,6 +411,11 @@ class PathPlanner:
 
             for i in range(10):
                 self.window.add_point(trajectory_o[0:2,i].copy(),color=(0, 255, 0))
+
+            if self.nodes[closest_node_id].vels.size == 0 and self.nodes[closest_node_id].rot_vels.size == 0:
+                print("Node is dead")
+                self.nodes[closest_node_id].is_dead = True
+                self.window.add_point(self.nodes[closest_node_id].point[0:2].copy().flatten(),color=(255, 0, 255))
 
             #Check if goal has been reached
             #print("TO DO: Check if at goal point.")
@@ -479,7 +471,7 @@ def main():
     # map_filename = "simple_map.png"
     # map_setings_filename = "simple.yaml"
     #robot information
-    goal_point = np.array([[42], [-45]]) #np.array([[30], [-20]])# np.array([[42], [-45]]) #m
+    goal_point = np.array([[42], [-44.5]]) #np.array([[30], [-20]])# np.array([[42], [-45]]) #m
     stopping_dist = 0.5 #m
 
     #RRT precursor
