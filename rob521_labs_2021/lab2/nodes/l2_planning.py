@@ -453,17 +453,31 @@ class PathPlanner:
         threshold_iter = 69420
 
         lowest_d = 9999
+        
+        offx = [self.goal_point[0] - 7, self.goal_point[0] + 7 - self.bounds[0,1]]
+        offy = [self.goal_point[1] - 7 - self.bounds[1,0], self.goal_point[1] + 7]
+
+        if offx[0] < self.bounds[0,0]: offx[0] = self.bounds[0,0]
+        if offx[1] > self.bounds[0,1]: offx[1] = self.bounds[0,1]
+        if offy[0] < self.bounds[1,0]: offy[1] = self.bounds[1,0]
+        if offy[1] > self.bounds[1,1]: offy[1] = self.bounds[1,1]
 
         while not goal_reached: #Most likely need more iterations than this to complete the map!
 
             #Sample map space
             point = self.sample_map_space()
 
-            if n%300 == 0:
+            if n%200 == 0:
                 point = self.goal_point
+            
+            elif n%205 == 0:
+                point = np.array([[40.5], [-45.2]])
+            
+            elif n%210 == 0:
+                point = np.array([[41], [-44]])
 
-            if lowest_d < 5 and n%100:
-                    point = self.goal_point
+            elif lowest_d < 5 and n%50:
+                point = self.sample_map_space(offx,offy)
 
             #Get the closest point
             closest_node_id = self.closest_node(point)
@@ -489,7 +503,7 @@ class PathPlanner:
             if np.min(self.occupancy_map[R, C]) <= 0:
                 continue
 
-            self.window.add_point(point.flatten().copy(),color=(0, 0, 255))
+            # self.window.add_point(point.flatten().copy(),color=(0, 0, 255))
 
             # append this collision-free node to our list
             self.nodes.append(Node(trajectory_o[:,-1].reshape((3,1)).copy(), closest_node_id, trajectory_o, self.nodes[closest_node_id].cost + self.cost_to_come(trajectory_o.copy())))
@@ -575,7 +589,7 @@ def main():
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
 
     start = time.time()
-    nodes = path_planner.rrt_planning()
+    nodes = path_planner.rrt_star_planning()
     node_path_metric = np.hstack(path_planner.recover_path())
 
     #Leftover test functions
@@ -583,6 +597,7 @@ def main():
     
     end = time.time()
     print("Path Planning Time Elapsed:", end-start)
+    
     time.sleep(5000)
 
 
