@@ -256,7 +256,7 @@ class PathPlanner:
         pt[0,:] = self.map_shape[0] - ((point[1,:] - self.map_settings_dict["origin"][1]) / self.map_settings_dict["resolution"])
         pt[1,:] = (point[0,:] - self.map_settings_dict["origin"][0]) / self.map_settings_dict["resolution"]
 
-        return pt.astype(int)
+        return pt.astype('int64')
 
     def points_to_robot_circle(self, points):
         #Convert a series of [x,y] points to robot map footprints for collision detection
@@ -267,8 +267,8 @@ class PathPlanner:
         cell = self.point_to_cell(points.copy())
         R, C = np.array([]), np.array([])
         for r, c in cell.T:
-
-            rr,cc = circle(r,c,self.robot_radius//self.map_settings_dict['resolution'], shape=self.map_shape)
+            print(r)
+            rr,cc = circle(r,c,np.int64(self.robot_radius//self.map_settings_dict['resolution']), shape=self.map_shape)
             R = np.concatenate((R,rr))
             C = np.concatenate((C,cc))
         return R.astype(int), C.astype(int)
@@ -383,13 +383,13 @@ class PathPlanner:
 
             if n%200 == 0:
                 point = self.goal_point
-            
+
             if n%205 == 0:
                 point = np.array([[40.5], [-45.2]])
-            
+
             if n%210 == 0:
                 point = np.array([[41], [-44]])
-            
+
             if lowest_d < 10:
                 point = self.sample_map_space()
 
@@ -460,7 +460,7 @@ class PathPlanner:
         threshold_iter = 69420
 
         lowest_d = 9999
-        
+
         offx = [self.goal_point[0] - 7, self.goal_point[0] + 7 - self.bounds[0,1]]
         offy = [self.goal_point[1] - 7 - self.bounds[1,0], self.goal_point[1] + 7]
 
@@ -476,13 +476,13 @@ class PathPlanner:
 
             if n%200 == 0:
                 point = self.goal_point
-            
+
             if n%205 == 0:
                 point = np.array([[40.5], [-45.2]])
-            
+
             if n%210 == 0:
                 point = np.array([[41], [-44]])
-            
+
             if lowest_d < 15:
                 point = self.sample_map_space()
 
@@ -560,7 +560,7 @@ class PathPlanner:
 
             if self.nodes[closest_node_id].opts.size == 0 or self.nodes[closest_node_id].num_chosen >= 6:
                 print("Node is dead")
-                self.nodes[closest_node_id].is_dead = True 
+                self.nodes[closest_node_id].is_dead = True
                 self.window.add_point(self.nodes[closest_node_id].point[0:2].copy().flatten(),color=(255, 0, 255))
 
             self.nodes[closest_node_id].num_chosen += 1
@@ -612,7 +612,7 @@ def main():
 
     #Leftover test functions
     np.save("shortest_path.npy", node_path_metric)
-    
+
     end = time.time()
     print("Path Planning Time Elapsed:", end-start)
 
