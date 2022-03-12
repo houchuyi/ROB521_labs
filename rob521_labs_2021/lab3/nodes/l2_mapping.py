@@ -150,7 +150,7 @@ class OccupancyGripMap:
         R, C = ray_trace(point[1], point[0], scan[1], scan[0])
         log_odds[R[0:-1], C[0:-1]] -= BETA
         log_odds[R[-1], C[-1]] += ALPHA
-        map[R, C] = self.log_odds_to_probability(log_odds[R, C])
+        map[R, C] = (self.log_odds_to_probability(log_odds[R, C])*100).astype(np.uint8)
 
         return map, log_odds
 
