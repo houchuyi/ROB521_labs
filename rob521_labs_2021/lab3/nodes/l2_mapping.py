@@ -67,6 +67,16 @@ class OccupancyGripMap:
     def broadcast_map_odom(self, e):
         self.tf_br.sendTransform(self.map_odom_tf)
 
+    def point_to_cell(self, point):
+        #Convert a series of [x,y] points in the map to the indices for the corresponding cell in the occupancy map
+        #point is a 2 by N matrix of points of interest
+        #print("TO DO: Implement a method to get the map cell the robot is currently occupying")
+        pt = point.copy()
+        pt[0,:] = (point[0,:] - self.map_msg.info.origin.position.x) / self.map_msg.info.resolution
+        pt[1,:] = (point[1,:] - self.map_msg.info.origin.position.y) / self.map_msg.info.resolution
+
+        return pt.astype(int)
+
     def scan_cb(self, scan_msg):
         # read new laser data and populate map
         # get current odometry robot pose
@@ -91,15 +101,24 @@ class OccupancyGripMap:
 
         # YOUR CODE HERE!!! Loop through each measurement in scan_msg to get the correct angle and
         # x_start and y_start to send to your ray_trace_update function.
+
         for i, r in enumerate(scan_msg.ranges):
 
             # current measurment's angle
-            scan_anlge_wrt_robot = scan_msg.angle_min + i * scan_msg.angle_increment
+            scan_angle_wrt_robot = scan_msg.angle_min + i * scan_msg.angle_increment
+
+            if scan_angle_wrt_robot > np.pi:
+                scan_angle_wrt_robot -= 2*np.pi
 
             # if we need to transform the anlge to global frame
-            scan_anlge_wrt_map = scan_anlge_wrt_robot + 1
-            break
+            scan_angle_wrt_map = scan_angle_wrt_robot + odom_map[2]
 
+            if scan_angle_wrt_map > np.pi:
+                scan_angle_wrt_map -= 2*np.pi
+            elif scan_angle_wrt_map < -np.pi
+                scan_angle_wrt_map += 2*np.pi
+
+            self.np_map, self.log_odds = self.ray_trace_update(self.np_map, self.log_odds, odom_map[0], odom_map[1], scan_angle_wrt_map, r)
 
 
         # publish the message
@@ -124,9 +143,14 @@ class OccupancyGripMap:
         # ray_trace and the equations from class. Your numpy map must be an array of int8s with 0 to 100 representing
         # probability of occupancy, and -1 representing unknown.
 
-
-
-
+        point = self.point_to_cell(np.array([x_start, y_start]))
+        x = x_start + range_mes*np.cos(angle)
+        y = y_start + range_mes*np.sin(angle)
+        scan = self.point_to_cell(np.array([x, y]))
+        R, C = ray_trace(point[1], point[0], scan[1], scan[0])
+        log_odds[R[0:-1], C[0:-1]] -= BETA
+        log_odds[R[-1], C[-1]] += ALPHA
+        map[R, C] = self.log_odds_to_probability(log_odds[R, C])
 
         return map, log_odds
 
