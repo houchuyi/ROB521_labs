@@ -28,6 +28,7 @@ class PygameWindow:
         self.origin = np.array(map_settings_dict['origin'])
 
         map_img = pygame.image.load('../maps/willowgarageworld_05res.png')
+        #map_img = pygame.image.load('../maps/simple_map.png')
         map_img = pygame.transform.scale(map_img, self.size)
 
         self.screen = pygame.display.set_mode(self.size)
@@ -65,11 +66,11 @@ class PygameWindow:
         pygame.draw.polygon(self.screen, color, [c_vec, p1_vec, p2_vec], width=width)
         pygame.display.update()
 
-    # def add_line(self, p1, p2, width=1, color=COLORS['k']):
-    #     pygame.draw.line(self.screen, color, p1, p2, width)
+    def add_line(self, p1, p2, width=1, color=COLORS['k']):
+        pygame.draw.line(self.screen, color, p1, p2, width)
 
-    # def remove_line(self, p1, p2, width=1, color=COLORS['w']):
-    #     pygame.draw.line(self.screen, color, p1, p2, width)
+    def remove_line(self, p1, p2, width=1, color=COLORS['w']):
+        pygame.draw.line(self.screen, color, p1, p2, width)
 
     def point_to_vec(self, point):
         vec = pygame.math.Vector2()
@@ -80,3 +81,6 @@ class PygameWindow:
         for e in pygame.event.get():
             if e.type == QUIT or (e.type == KEYUP and e.key == K_ESCAPE):
                 sys.exit("Closing planner.")
+
+    def save_image(self, filename):
+        pygame.image.save(self.screen, filename)
