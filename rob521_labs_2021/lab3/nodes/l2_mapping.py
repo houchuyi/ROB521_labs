@@ -85,12 +85,20 @@ class OccupancyGripMap:
         odom_map[1] = odom_map_tf.translation.y
         odom_map[2] = euler_from_ros_quat(odom_map_tf.rotation)[2]
 
+        print(odom_map)
+
         # loop through all range measurements
 
         # YOUR CODE HERE!!! Loop through each measurement in scan_msg to get the correct angle and
         # x_start and y_start to send to your ray_trace_update function.
+        for i, r in enumerate(scan_msg.ranges):
 
+            # current measurment's angle
+            scan_anlge_wrt_robot = scan_msg.angle_min + i * scan_msg.angle_increment
 
+            # if we need to transform the anlge to global frame
+            scan_anlge_wrt_map = scan_anlge_wrt_robot + 1
+            break
 
 
 
