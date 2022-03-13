@@ -17,7 +17,7 @@ from utils import convert_pose_to_tf, convert_tf_to_pose, euler_from_ros_quat, \
 
 ALPHA = 1
 BETA = 1
-MAP_DIM = (4, 4)
+MAP_DIM = (6, 6)
 CELL_SIZE = .01
 NUM_PTS_OBSTACLE = 3
 SCAN_DOWNSAMPLE = 1
@@ -72,8 +72,9 @@ class OccupancyGripMap:
         #point is a 2 by N matrix of points of interest
         #print("TO DO: Implement a method to get the map cell the robot is currently occupying")
         pt = point.copy()
-        pt[0,:] = (point[0,:] - self.map_msg.info.origin.position.x) / self.map_msg.info.resolution
-        pt[1,:] = (point[1,:] - self.map_msg.info.origin.position.y) / self.map_msg.info.resolution
+
+        pt[0] = (point[0]) / self.map_msg.info.resolution
+        pt[1] = (point[1]) / self.map_msg.info.resolution
 
         return pt.astype(int)
 
@@ -95,8 +96,6 @@ class OccupancyGripMap:
         odom_map[1] = odom_map_tf.translation.y
         odom_map[2] = euler_from_ros_quat(odom_map_tf.rotation)[2]
 
-        print(odom_map)
-
         # loop through all range measurements
 
         # YOUR CODE HERE!!! Loop through each measurement in scan_msg to get the correct angle and
@@ -115,10 +114,15 @@ class OccupancyGripMap:
 
             if scan_angle_wrt_map > np.pi:
                 scan_angle_wrt_map -= 2*np.pi
-            elif scan_angle_wrt_map < -np.pi
+            elif scan_angle_wrt_map < -np.pi:
                 scan_angle_wrt_map += 2*np.pi
 
-            self.np_map, self.log_odds = self.ray_trace_update(self.np_map, self.log_odds, odom_map[0], odom_map[1], scan_angle_wrt_map, r)
+            max_range_flag = False
+            if r > scan_msg.range_max:
+                r = scan_msg.range_max
+                max_range_flag = True
+
+            self.np_map, self.log_odds = self.ray_trace_update(self.np_map, self.log_odds, odom_map[0], odom_map[1], scan_angle_wrt_map, r, max_range_flag)
 
 
         # publish the message
@@ -126,7 +130,7 @@ class OccupancyGripMap:
         self.map_msg.data = self.np_map.flatten()
         self.map_pub.publish(self.map_msg)
 
-    def ray_trace_update(self, map, log_odds, x_start, y_start, angle, range_mes):
+    def ray_trace_update(self, map, log_odds, x_start, y_start, angle, range_mes, max_range_flag):
         """
         A ray tracing grid update as described in the lab document.
 
@@ -147,9 +151,33 @@ class OccupancyGripMap:
         x = x_start + range_mes*np.cos(angle)
         y = y_start + range_mes*np.sin(angle)
         scan = self.point_to_cell(np.array([x, y]))
+
         R, C = ray_trace(point[1], point[0], scan[1], scan[0])
-        log_odds[R[0:-1], C[0:-1]] -= BETA
-        log_odds[R[-1], C[-1]] += ALPHA
+
+        # delete illegal values
+        R_low = np.where(R<0, 1, 0)
+        R_high = np.argwhere(R>(MAP_DIM[1]//CELL_SIZE))
+        C_low = np.argwhere(C<0)
+        C_high = np.argwhere(C>(MAP_DIM[0]//CELL_SIZE))
+        
+        if R_high.size > 0:
+            R_low[R_high] = 1
+        if C_low.size > 0:
+            R_low[C_low] = 1
+        if C_high.size > 0:
+            R_low[C_high] = 1
+
+        index_to_delete = np.argwhere(R_low)
+
+        R = np.delete(R, index_to_delete)
+        C = np.delete(C, index_to_delete)
+        
+        if len(R) > 0:
+            log_odds[R[0:-1], C[0:-1]] -= BETA
+            if not max_range_flag:
+                log_odds[R[-1], C[-1]] += ALPHA
+        else:
+            print('Entire ray outside of map, no update')
         map[R, C] = (self.log_odds_to_probability(log_odds[R, C])*100).astype(np.uint8)
 
         return map, log_odds
